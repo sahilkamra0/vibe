@@ -1,18 +1,45 @@
+import { Sandbox } from "@e2b/code-interpreter";
 import { openai, createAgent } from "@inngest/agent-kit";
-import { inngest } from "./client";
 
-export const processTask = inngest.createFunction(
+import { inngest } from "./client";
+import { getSandbox } from "./utils";
+
+export const helloWorld = inngest.createFunction(
   {
-    id: "process-task",
+    id: "hello-world",
     triggers: {
-      event: "app/task.created",
+      event: "test/hello.world",
     },
   },
-  async ({ event }) => {
+  async ({ event, step }) => {
+    const sandboxId = await step.run("get-sandbox-id", async () => {
+      const sandbox = await Sandbox.create({
+        template: "codex",
+      });
+
+      const projectDir = "/home/user/app";
+      await sandbox.commands.run(
+        `mkdir -p ${projectDir} && cd ${projectDir} && if [ ! -f package.json ]; then npx create-next-app@latest . --ts --use-npm --yes; fi`,
+        { background: false }
+      );
+
+      await sandbox.commands.run(
+        `cd ${projectDir} && npm install`,
+        { background: false }
+      );
+
+      await sandbox.commands.run(
+        `cd ${projectDir} && npx next dev --hostname 0.0.0.0 --port 3000`,
+        { background: true }
+      );
+
+      return sandbox.sandboxId;
+    });
+
     const codeAgent = createAgent({
       name: "code-agent",
       system:
-        "You are an expert next.js developer. You write readable, maintainable code.",
+        "You are an expert Next.js developer. You write readable, maintainable code. You write simple Next.js & React snippets.",
       model: openai({
         model: "gpt-4o",
       }),
@@ -22,6 +49,19 @@ export const processTask = inngest.createFunction(
       `Write the following snippet: ${event.data.value}`
     );
 
-    return { output };
+    const sandboxUrl = await step.run("get-sandbox-url", async () => {
+      const sandbox = await getSandbox(sandboxId);
+
+      const host = sandbox.getHost(3000);
+
+      return `https://${host}`;
+    });
+
+
+    return {
+      output,
+      sandboxId,
+      sandboxUrl,
+    };
   }
 );

@@ -10,7 +10,7 @@ export const appRouter = createTRPCRouter({
     )
     .mutation(async ({ input }) => {
       await inngest.send({
-        name: "app/task.created",
+        name: "test/hello.world",
         data: {
           value: input.value,
         }
